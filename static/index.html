@@ -3,11 +3,53 @@
     html {
         margin: 0px;
     }
+
+    .floater {
+        position: fixed;
+        left: 10px;
+        z-index: 10;
+    }
+
+    #colorpick {
+        position: fixed;
+        z-index: 11;
+        top: 10px;
+        background-color: white;
+        padding: 5px;
+    }
 </style>
 
 <canvas id="game"></canvas>
 
+<button class="floater" style="top: 50px" onclick="prompt_username()">
+    username
+</button>
+<button class="floater" style="top: 80px" onclick="prompt_hat()">
+    hat url
+</button>
+
+<div class="floater" id="colorpick">
+    <input type="color" id="bodyColor" onchange="update_color()" />
+    <label for="head">body color</label>
+</div>
+
 <script>
+    function update_color() {
+        var col = document.getElementById("bodyColor").value;
+        set_color(col);
+    }
+
+    function prompt_username() {
+        var u = prompt("enter username", playerData.username);
+        if (u) set_username(u);
+    }
+
+    function prompt_hat() {
+        var h = prompt("enter hat url", playerData.hat);
+        if (h) set_hat(h);
+        else set_hat("");
+    }
+
     var canvas = document.getElementById("game");
     var ctx = canvas.getContext("2d");
     var mouse = { x: null, y: null };
@@ -139,6 +181,8 @@
             if (localStorage.getItem("playerdata"))
                 playerData = JSON.parse(localStorage.getItem("playerdata"));
 
+            document.getElementById("bodyColor").value = playerData.color;
+
             socket.send(
                 JSON.stringify({
                     type: "meta",
@@ -185,12 +229,20 @@
         );
     }
 
-    var frame = 0;
-    var angle = 0;
-    setInterval(() => {
+    var last_resize = 0;
+    function update_window_size() {
         canvas.width = document.body.clientWidth;
         canvas.height = document.body.clientHeight;
+        last_resize = Date.now();
+    }
 
+    window.onresize = update_window_size;
+
+    var frame = 0;
+    var angle = 0;
+    update_window_size();
+    setInterval(() => {
+        if (last_resize + 100 > Date.now()) return;
         // ctx.fillStyle = "white";
         // ctx.fillRect(0, 0, canvas.width, canvas.height);
 
