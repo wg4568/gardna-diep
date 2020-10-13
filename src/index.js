@@ -1,7 +1,6 @@
+const config = require("../config.json");
 const express = require("express");
 const ws = require("ws");
-
-const config = { httpPort: 8104, wsPort: 25565 };
 
 const app = express();
 const server = new ws.Server({ port: config.wsPort });
@@ -102,9 +101,13 @@ setInterval(() => {
             );
         }
     });
-}, 1);
+}, 1000 / config.tps);
 
 app.use(express.static("static"));
+
+app.get("/websocket", (req, res) => {
+    res.send(`${config.protocol}://${config.domain}:${config.wsPort}`);
+});
 
 app.on("upgrade", (request, socket, head) => {
     server.handleUpgrade(request, socket, head, (socket) => {

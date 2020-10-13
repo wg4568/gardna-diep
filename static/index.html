@@ -65,7 +65,19 @@
         hat: ""
     };
 
-    var socket = new WebSocket("ws://gardnerr.mynetgear.com:25565");
+    var socket;
+    const Http = new XMLHttpRequest();
+    Http.open("GET", "/websocket");
+    Http.send();
+
+    Http.onreadystatechange = (e) => {
+        if (Http.readyState == 4 && Http.status == 200) {
+            console.log("got websocket url", Http.responseText);
+            socket = new WebSocket(Http.responseText);
+            start_game();
+        }
+    };
+
     var players = [];
 
     var background = new Image();
@@ -171,32 +183,6 @@
         ctx.setTransform(1, 0, 0, 1, 0, 0);
     }
 
-    socket.onmessage = (msg) => {
-        var packet = JSON.parse(msg.data);
-
-        if (packet.type == "onboard") {
-            playerid = packet.data.id;
-            playerData.username = packet.data.username;
-
-            if (localStorage.getItem("playerdata"))
-                playerData = JSON.parse(localStorage.getItem("playerdata"));
-
-            document.getElementById("bodyColor").value = playerData.color;
-
-            socket.send(
-                JSON.stringify({
-                    type: "meta",
-                    data: playerData
-                })
-            );
-            console.log("connected with player id", playerid);
-        }
-
-        if (packet.type == "gamestate") {
-            players = packet.data;
-        }
-    };
-
     function hashCode(s) {
         return s.split("").reduce(function (a, b) {
             a = (a << 5) - a + b.charCodeAt(0);
@@ -238,62 +224,90 @@
 
     window.onresize = update_window_size;
 
-    var frame = 0;
-    var angle = 0;
-    update_window_size();
-    setInterval(() => {
-        if (last_resize + 100 > Date.now()) return;
-        // ctx.fillStyle = "white";
-        // ctx.fillRect(0, 0, canvas.width, canvas.height);
+    function start_game() {
+        socket.onmessage = (msg) => {
+            var packet = JSON.parse(msg.data);
 
-        ctx.drawImage(
-            background,
-            -position.x + canvas.width / 2,
-            -position.y + canvas.height / 2,
-            background.width * 1.5,
-            background.height * 1.5
-        );
+            if (packet.type == "onboard") {
+                playerid = packet.data.id;
+                playerData.username = packet.data.username;
 
-        if (input.w) position.y -= speed;
-        if (input.s) position.y += speed;
-        if (input.a) position.x -= speed;
-        if (input.d) position.x += speed;
+                if (localStorage.getItem("playerdata"))
+                    playerData = JSON.parse(localStorage.getItem("playerdata"));
 
-        angle = angleBetween(
-            canvas.width / 2,
-            canvas.height / 2,
-            mouse.x,
-            mouse.y
-        );
-        drawPlayer(canvas.width / 2, canvas.height / 2, angle, playerData);
+                document.getElementById("bodyColor").value = playerData.color;
 
-        for (var i = 0; i < players.length; i++) {
-            var player = players[i];
-            if (player.id == playerid) continue;
+                socket.send(
+                    JSON.stringify({
+                        type: "meta",
+                        data: playerData
+                    })
+                );
+                console.log("connected with player id", playerid);
+            }
 
-            // console.log(player.playerData);
+            if (packet.type == "gamestate") {
+                players = packet.data;
+            }
+        };
 
-            drawPlayer(
-                player.x - position.x + canvas.width / 2,
-                player.y - position.y + canvas.height / 2,
-                player.a,
-                player.playerData
+        var frame = 0;
+        var angle = 0;
+        update_window_size();
+        setInterval(() => {
+            if (last_resize + 100 > Date.now()) return;
+            // ctx.fillStyle = "white";
+            // ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.drawImage(
+                background,
+                -position.x + canvas.width / 2,
+                -position.y + canvas.height / 2,
+                background.width * 1.5,
+                background.height * 1.5
             );
-        }
 
-        if (frame % 5 == 0 && socket.readyState == socket.OPEN) {
-            socket.send(
-                JSON.stringify({
-                    type: "position",
-                    data: {
-                        x: position.x,
-                        y: position.y,
-                        a: angle
-                    }
-                })
+            if (input.w) position.y -= speed;
+            if (input.s) position.y += speed;
+            if (input.a) position.x -= speed;
+            if (input.d) position.x += speed;
+
+            angle = angleBetween(
+                canvas.width / 2,
+                canvas.height / 2,
+                mouse.x,
+                mouse.y
             );
-        }
+            drawPlayer(canvas.width / 2, canvas.height / 2, angle, playerData);
 
-        frame++;
-    });
+            for (var i = 0; i < players.length; i++) {
+                var player = players[i];
+                if (player.id == playerid) continue;
+
+                // console.log(player.playerData);
+
+                drawPlayer(
+                    player.x - position.x + canvas.width / 2,
+                    player.y - position.y + canvas.height / 2,
+                    player.a,
+                    player.playerData
+                );
+            }
+
+            if (frame % 5 == 0 && socket.readyState == socket.OPEN) {
+                socket.send(
+                    JSON.stringify({
+                        type: "position",
+                        data: {
+                            x: position.x,
+                            y: position.y,
+                            a: angle
+                        }
+                    })
+                );
+            }
+
+            frame++;
+        });
+    }
 </script>
