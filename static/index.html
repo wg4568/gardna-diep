@@ -1,0 +1,247 @@
+<style>
+    body,
+    html {
+        margin: 0px;
+    }
+</style>
+
+<canvas id="game"></canvas>
+
+<script>
+    var canvas = document.getElementById("game");
+    var ctx = canvas.getContext("2d");
+    var mouse = { x: null, y: null };
+    var input = { w: false, s: false, a: false, d: false };
+    var position = { x: 5147, y: 1371 };
+    var speed = 2;
+    var playerid = null;
+    var hatCache = {};
+
+    var playerData = {
+        color: "#" + Math.floor(Math.random() * 16777215).toString(16),
+        username: "",
+        hat: ""
+    };
+
+    var socket = new WebSocket("ws://gardnerr.mynetgear.com:25565");
+    var players = [];
+
+    var background = new Image();
+    background.src = "map.jpg";
+
+    document.addEventListener(
+        "mousemove",
+        (e) => {
+            var rect = canvas.getBoundingClientRect();
+            mouse.x = e.clientX - rect.left;
+            mouse.y = e.clientY - rect.top;
+        },
+        false
+    );
+
+    document.addEventListener("keydown", (e) => {
+        if (e.keyCode == 87) input.w = true; // W
+        if (e.keyCode == 83) input.s = true; // S
+        if (e.keyCode == 65) input.a = true; // A
+        if (e.keyCode == 68) input.d = true; // D
+    });
+
+    document.addEventListener("keyup", (e) => {
+        if (e.keyCode == 87) input.w = false; // W
+        if (e.keyCode == 83) input.s = false; // S
+        if (e.keyCode == 65) input.a = false; // A
+        if (e.keyCode == 68) input.d = false; // D
+    });
+
+    function angleBetween(x1, y1, x2, y2) {
+        return Math.atan2(y1 - y2, x1 - x2);
+    }
+
+    function drawPlayer(x, y, a, pd) {
+        var hatImage;
+        if (pd.hat) {
+            var ref = hashCode(pd.hat);
+            if (ref in hatCache) {
+                hatImage = hatCache[ref];
+            } else {
+                hatImage = new Image();
+                hatImage.src = pd.hat;
+                hatCache[ref] = hatImage;
+            }
+        }
+
+        ctx.lineWidth = 5;
+
+        ctx.translate(x, y);
+        ctx.rotate(a);
+
+        ctx.beginPath();
+        ctx.rect(0, -20, -60, 40);
+
+        ctx.fillStyle = "lightgrey";
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(0, 0, 40, 0, 2 * Math.PI);
+
+        ctx.fillStyle = pd.color;
+        ctx.fill();
+        ctx.stroke();
+
+        if (pd.username == "SERVER OWNER") {
+            ctx.beginPath();
+            ctx.rect(0, -20, -70, 40);
+
+            ctx.fillStyle = "lightgrey";
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.rect(-50, -50, 100, 100);
+            ctx.fillStyle = pd.color;
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        ctx.rotate(-a);
+
+        ctx.font = "bold 32px Comic Sans MS";
+        ctx.strokeStyle = "black";
+        ctx.lineWidth = 2;
+
+        ctx.fillStyle = pd.color;
+
+        if (pd.hat) {
+            ctx.drawImage(
+                hatImage,
+                -50,
+                (-100 * hatImage.height) / hatImage.width - 30,
+                100,
+                (100 * hatImage.height) / hatImage.width
+            );
+        }
+
+        var width = ctx.measureText(pd.username).width;
+        ctx.fillText(pd.username, -width / 2, 70);
+        ctx.strokeText(pd.username, -width / 2, 70);
+
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+    }
+
+    socket.onmessage = (msg) => {
+        var packet = JSON.parse(msg.data);
+
+        if (packet.type == "onboard") {
+            playerid = packet.data.id;
+            playerData.username = packet.data.username;
+
+            if (localStorage.getItem("playerdata"))
+                playerData = JSON.parse(localStorage.getItem("playerdata"));
+
+            socket.send(
+                JSON.stringify({
+                    type: "meta",
+                    data: playerData
+                })
+            );
+            console.log("connected with player id", playerid);
+        }
+
+        if (packet.type == "gamestate") {
+            players = packet.data;
+        }
+    };
+
+    function hashCode(s) {
+        return s.split("").reduce(function (a, b) {
+            a = (a << 5) - a + b.charCodeAt(0);
+            return a & a;
+        }, 0);
+    }
+
+    function set_username(u) {
+        playerData.username = u;
+        commit_playerdata();
+    }
+
+    function set_color(c) {
+        playerData.color = c;
+        commit_playerdata();
+    }
+
+    function set_hat(h) {
+        playerData.hat = h;
+        commit_playerdata();
+    }
+
+    function commit_playerdata() {
+        localStorage.setItem("playerdata", JSON.stringify(playerData));
+        socket.send(
+            JSON.stringify({
+                type: "meta",
+                data: playerData
+            })
+        );
+    }
+
+    var frame = 0;
+    var angle = 0;
+    setInterval(() => {
+        canvas.width = document.body.clientWidth;
+        canvas.height = document.body.clientHeight;
+
+        // ctx.fillStyle = "white";
+        // ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.drawImage(
+            background,
+            -position.x + canvas.width / 2,
+            -position.y + canvas.height / 2,
+            background.width * 1.5,
+            background.height * 1.5
+        );
+
+        if (input.w) position.y -= speed;
+        if (input.s) position.y += speed;
+        if (input.a) position.x -= speed;
+        if (input.d) position.x += speed;
+
+        angle = angleBetween(
+            canvas.width / 2,
+            canvas.height / 2,
+            mouse.x,
+            mouse.y
+        );
+        drawPlayer(canvas.width / 2, canvas.height / 2, angle, playerData);
+
+        for (var i = 0; i < players.length; i++) {
+            var player = players[i];
+            if (player.id == playerid) continue;
+
+            // console.log(player.playerData);
+
+            drawPlayer(
+                player.x - position.x + canvas.width / 2,
+                player.y - position.y + canvas.height / 2,
+                player.a,
+                player.playerData
+            );
+        }
+
+        if (frame % 5 == 0 && socket.readyState == socket.OPEN) {
+            socket.send(
+                JSON.stringify({
+                    type: "position",
+                    data: {
+                        x: position.x,
+                        y: position.y,
+                        a: angle
+                    }
+                })
+            );
+        }
+
+        frame++;
+    });
+</script>
